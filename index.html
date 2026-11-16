@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teste do tablet</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f6e56">
+<style>
+  body{font:18px/1.5 system-ui,sans-serif;max-width:720px;margin:0 auto;padding:16px;color:#1c1c1a;background:#f6f5f0}
+  h1{font-size:24px;margin:8px 0}
+  h2{font-size:20px;margin:0 0 8px}
+  section{background:#fff;border:1px solid #d3d1c7;border-radius:12px;padding:16px;margin:16px 0}
+  button{font:inherit;padding:12px 16px;margin:6px 6px 6px 0;border-radius:8px;border:1px solid #0f6e56;background:#e1f5ee;color:#04342c}
+  button:disabled{opacity:.5}
+  .out{margin:8px 0;white-space:pre-wrap}
+  .ok{color:#27500a}
+  .bad{color:#a32d2d}
+  textarea{width:100%;height:240px;font:14px/1.4 monospace;box-sizing:border-box}
+  audio{width:100%;margin-top:8px}
+</style>
+</head>
+<body>
+<!-- Spike descartável: responde se o tablet aguenta voz pt-BR, gravação, dados guardados e instalação. Não é o app. -->
+<h1>Teste do tablet</h1>
+<p>Abra esta página no <b>Chrome</b> do tablet e faça os quatro testes na ordem. No final, mande o texto do quadro "Resultado".</p>
+
+<section>
+  <h2>1. Voz em português</h2>
+  <div id="voices" class="out">Procurando vozes...</div>
+  <button id="speak">Ouvir a frase</button>
+  <p>Como saiu?</p>
+  <button data-k="Voz ouvida" data-out="heardOut">Português do Brasil, natural</button>
+  <button data-k="Voz ouvida" data-out="heardOut">Português com voz estranha</button>
+  <button data-k="Voz ouvida" data-out="heardOut">Voz inglesa lendo português</button>
+  <button data-k="Voz ouvida" data-out="heardOut">Não saiu som</button>
+  <div id="heardOut" class="out"></div>
+</section>
+
+<section>
+  <h2>2. Gravar a voz de vocês</h2>
+  <p>O Chrome vai pedir permissão para o microfone. Diga "cachorro" depois de tocar.</p>
+  <button id="rec">Gravar 3 segundos</button>
+  <div id="recOut" class="out"></div>
+  <audio id="play" controls hidden></audio>
+  <p>Deu para ouvir a gravação?</p>
+  <button data-k="Gravação ouvida" data-out="recHeardOut">Sim, clara</button>
+  <button data-k="Gravação ouvida" data-out="recHeardOut">Sim, mas ruim</button>
+  <button data-k="Gravação ouvida" data-out="recHeardOut">Não</button>
+  <div id="recHeardOut" class="out"></div>
+</section>
+
+<section>
+  <h2>3. Guardar os dados</h2>
+  <button id="persist">Pedir armazenamento permanente</button>
+  <div id="persistOut" class="out"></div>
+  <div id="oldOut" class="out"></div>
+  <audio id="oldPlay" controls hidden></audio>
+  <p>Depois de gravar no teste 2: feche o Chrome por completo, abra este endereço de novo e veja se a gravação aparece aqui.</p>
+</section>
+
+<section>
+  <h2>4. Instalar como aplicativo</h2>
+  <button id="install" disabled>Instalar</button>
+  <div id="installOut" class="out"></div>
+</section>
+
+<section>
+  <h2>Resultado</h2>
+  <textarea id="summary" readonly></textarea>
+  <button id="copy">Copiar resultado</button>
+  <div id="copyOut" class="out"></div>
+</section>
+
+<script>
+const R = {}; // respostas de cada teste, na ordem em que aparecem no quadro Resultado
+const $ = id => document.getElementById(id);
+const show = (id, text, cls) => { const e = $(id); e.textContent = text; e.className = 'out ' + (cls || ''); };
+function summary() {
+  $('summary').value = [
+    'Navegador: ' + navigator.userAgent,
+    `Tela: ${innerWidth}x${innerHeight} (dpr ${devicePixelRatio})`,
+    ...Object.entries(R).map(([k, v]) => k + ': ' + v),
+  ].join('\n');
+}
+document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
+  R[b.dataset.k] = b.textContent;
+  show(b.dataset.out, 'Anotado: ' + b.textContent, 'ok');
+  summary();
+});
+
+// 1. Voz
+const isPt = v => /^pt/i.test(v.lang); // Android usa "pt_BR", outros usam "pt-BR"
+function listVoices() {
+  const all = speechSynthesis.getVoices(), pt = all.filter(isPt);
+  R['Vozes'] = `${all.length} no total; em português: ` +
+    (pt.map(v => `${v.name} [${v.lang}, ${v.localService ? 'no aparelho' : 'pela internet'}]`).join('; ') || 'nenhuma');
+  show('voices', R['Vozes'], pt.length ? 'ok' : 'bad');
+  summary();
+}
+if ('speechSynthesis' in window) {
+  listVoices();
+  speechSynthesis.onvoiceschanged = listVoices; // o Chrome carrega a lista depois da página
+} else {
+  R['Vozes'] = 'navegador sem suporte a voz';
+  show('voices', R['Vozes'], 'bad');
+  $('speak').disabled = true;
+}
+$('speak').onclick = () => {
+  const u = new SpeechSynthesisUtterance('Oi! A Pipoca está com a pata machucada. Você pode ajudar?');
+  u.lang = 'pt-BR';
+  const v = speechSynthesis.getVoices().filter(isPt).sort((a, b) => /br/i.test(b.lang) - /br/i.test(a.lang))[0];
+  if (v) u.voice = v;
+  u.onerror = e => { R['Voz erro'] = e.error; summary(); };
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+};
+
+// Banco local mínimo (IndexedDB), o mesmo tipo de armazenamento que o app usaria
+const db = new Promise((res, rej) => {
+  const q = indexedDB.open('teste', 1);
+  q.onupgradeneeded = () => q.result.createObjectStore('kv');
+  q.onsuccess = () => res(q.result);
+  q.onerror = () => rej(q.error);
+});
+const put = async (k, v) => {
+  const t = (await db).transaction('kv', 'readwrite');
+  t.objectStore('kv').put(v, k);
+  return new Promise((res, rej) => { t.oncomplete = res; t.onerror = () => rej(t.error); });
+};
+const get = async k => {
+  const q = (await db).transaction('kv').objectStore('kv').get(k);
+  return new Promise((res, rej) => { q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+};
+
+// 2. Gravação
+$('rec').onclick = async () => {
+  $('rec').disabled = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mr = new MediaRecorder(stream), chunks = [];
+    mr.ondataavailable = e => chunks.push(e.data);
+    mr.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: mr.mimeType });
+      $('play').src = URL.createObjectURL(blob);
+      $('play').hidden = false;
+      R['Gravação'] = `ok, ${mr.mimeType}, ${Math.round(blob.size / 1024)} KB`;
+      try {
+        await put('rec', { blob, at: new Date().toLocaleString('pt-BR') });
+        R['Gravação guardada'] = 'sim';
+      } catch (e) { R['Gravação guardada'] = 'erro: ' + e.name; }
+      show('recOut', R['Gravação'] + '. Toque no player para ouvir.', 'ok');
+      summary();
+      $('rec').disabled = false;
+    };
+    mr.start();
+    show('recOut', 'Gravando... fale agora.');
+    setTimeout(() => mr.stop(), 3000);
+  } catch (e) {
+    R['Gravação'] = 'erro: ' + e.name;
+    show('recOut', 'Não deu para gravar: ' + e.name, 'bad');
+    summary();
+    $('rec').disabled = false;
+  }
+};
+
+// 3. Dados guardados
+(async () => {
+  try {
+    const old = await get('rec');
+    if (old) { $('oldPlay').src = URL.createObjectURL(old.blob); $('oldPlay').hidden = false; }
+    R['Dados da visita anterior'] = old ? 'sim, gravação de ' + old.at : 'não';
+    show('oldOut', old ? `Achei a gravação da visita anterior (${old.at}).` : 'Nenhuma gravação guardada ainda.', old ? 'ok' : '');
+  } catch (e) { R['Dados da visita anterior'] = 'erro: ' + e.name; }
+  if (navigator.storage?.persisted) R['Armazenamento permanente'] = (await navigator.storage.persisted()) ? 'já concedido' : 'ainda não pedido';
+  summary();
+})();
+$('persist').onclick = async () => {
+  if (!navigator.storage?.persist) R['Armazenamento permanente'] = 'sem suporte';
+  else {
+    const ok = await navigator.storage.persist(), est = await navigator.storage.estimate();
+    R['Armazenamento permanente'] = (ok ? 'concedido' : 'negado') + `, espaço ${Math.round(est.quota / 1e6)} MB`;
+  }
+  show('persistOut', R['Armazenamento permanente'], /^concedido/.test(R['Armazenamento permanente']) ? 'ok' : 'bad');
+  summary();
+};
+
+// 4. Instalação
+const standalone = matchMedia('(display-mode: standalone)').matches;
+R['Aberto como aplicativo'] = standalone ? 'sim' : 'não';
+R['Convite de instalação'] = 'não recebido';
+show('installOut', standalone
+  ? 'Você abriu pelo ícone instalado: funcionou.'
+  : 'Se o botão Instalar não acender em alguns segundos, abra o menu ⋮ do Chrome e procure "Instalar app" ou "Adicionar à tela inicial".');
+let invite;
+addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  invite = e;
+  R['Convite de instalação'] = 'recebido';
+  $('install').disabled = false;
+  show('installOut', 'O Chrome permite instalar. Toque em Instalar.', 'ok');
+  summary();
+});
+addEventListener('appinstalled', () => {
+  R['Instalado'] = 'sim';
+  show('installOut', 'Instalado. Procure o ícone "Teste" na tela inicial e abra por ele.', 'ok');
+  summary();
+});
+$('install').onclick = async () => {
+  invite.prompt();
+  R['Resposta ao convite'] = (await invite.userChoice).outcome;
+  summary();
+};
+if ('serviceWorker' in navigator)
+  navigator.serviceWorker.register('sw.js')
+    .then(() => R['Service worker'] = 'ok', e => R['Service worker'] = 'erro: ' + e.name)
+    .finally(summary);
+
+$('copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('summary').value); show('copyOut', 'Copiado.', 'ok'); }
+  catch { $('summary').select(); show('copyOut', 'Selecione o texto e copie, ou tire uma foto da tela.'); }
+};
+summary();
+</script>
+</body>
+</html>
